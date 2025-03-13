@@ -1,0 +1,61 @@
+#include <SoftwareSerial.h>
+
+#define LIDAR_RX 5  // Chân RX của LiDAR nối với chân TX của ESP
+#define LIDAR_TX 6  // Chân TX của LiDAR nối với chân RX của ESP
+
+SoftwareSerial lidarSerial(LIDAR_RX, LIDAR_TX); // UART ảo để giao tiếp với LiDAR
+
+uint8_t values[22]; // Mảng chứa dữ liệu 1 frame
+uint16_t distances[360]; // Lưu khoảng cách theo góc
+uint8_t count = 0;
+
+void setup() {
+  Serial.begin(9600);  // Kết nối Serial Monitor
+  lidarSerial.begin(115200); // Kết nối LiDAR
+  lidarSerial.print("startlds$"); // Gửi lệnh khởi động LiDAR
+}
+
+void loop() {
+  if (lidarSerial.available()) {
+    uint8_t val = lidarSerial.read();
+    
+    if (val == 0xFA && count > 21) { // Nếu tìm thấy byte bắt đầu 0xFA
+      if (count == 22) {
+        processLidarData();
+      }
+      count = 0;
+    }
+    
+    if (count < 22) {
+      values[count] = val;
+      count++;
+    }
+  }
+}
+
+void processLidarData() {
+  uint8_t index = (values[1] - 0xA0) * 4;
+  uint16_t speed = getInt(values[2], values[3]);
+
+  for (int i = 0; i < 4; i++) {
+    uint16_t distance = getInt(values[4 + i * 4], values[5 + i * 4]);
+    uint16_t reflectivity = getInt(values[6 + i * 4], values[7 + i * 4]);
+    
+    if (index + i < 360 && reflectivity > 10) {
+      distances[index + i] = distance;
+    } else {
+      distances[index + i] = 0;
+    }
+  }
+
+  // Serial.print("Angle: "); Serial.print(index);
+  // Serial.print(" | Distance: "); Serial.println(distances[index]);
+  
+  if (index == 200) {
+    Serial.print("Góc 200: "); Serial.println(distances[200]);
+  }
+}
+
+uint16_t getInt(uint8_t low, uint8_t high) {
+  return (high << 8) | low;
+}
